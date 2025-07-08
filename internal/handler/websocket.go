@@ -1,14 +1,17 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/baoerzuikeai/QQBot-NapCat/internal/aiclient"
 	"github.com/baoerzuikeai/QQBot-NapCat/internal/onebot"
 	"github.com/gorilla/websocket"
 )
@@ -59,7 +62,7 @@ func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Error unmarshalling private message event: %v", err)
 					continue // Skip this message if unmarshalling fails
 				}
-				sendPrivateMsg(strconv.FormatInt(privateMessageEvent.UserID, 10))
+				sendPrivateMsg(strconv.FormatInt(privateMessageEvent.UserID, 10), privateMessageEvent.RawMessage)
 
 			}
 
@@ -69,22 +72,32 @@ func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendPrivateMsg(userid string) {
+func sendPrivateMsg(userid, msg string) {
 	url := "http://localhost:3000/send_private_msg"
 	method := "POST"
 
+	deepSeek := aiclient.NewDeepSeekClient("sk-78305562a4c942748da616a3d9a58ad7", "https://api.deepseek.com/chat/completions")
+	//读取txt文本
+	contentBytes, _ := os.ReadFile("system.txt")
+	history := []aiclient.Message{
+		{
+			Role:    "system",
+			Content: string(contentBytes),
+		},
+	}
+	his, _ := deepSeek.GetResponse(context.Background(), history, msg)
+
 	payload := strings.NewReader(`{
-    "user_id": "2634174807",
+    "user_id": ` + `"` + userid + `"` + `,
     "message": [
         {
             "type": "text",
             "data": {
-                "text": "napcat"
+                "text": ` + `"` + his[0].Message.Content + `"` + `
             }
         }
     ]
 }`)
-
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, payload)
 
@@ -106,5 +119,5 @@ func sendPrivateMsg(userid string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(string(body))
+	log.Println(string(body))
 }
