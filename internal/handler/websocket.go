@@ -36,7 +36,7 @@ func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 			break // Exit on error
 		}
 		var baseEvent onebot.BaseEvent
-		err = json.Unmarshal(msg, baseEvent)
+		err = json.Unmarshal(msg, &baseEvent)
 		if err != nil {
 			log.Printf("Error unmarshalling message: %v", err)
 			continue // Skip this message if unmarshalling fails
