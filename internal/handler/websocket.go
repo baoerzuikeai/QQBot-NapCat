@@ -1,12 +1,15 @@
 package websocket
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"github.com/baoerzuikeai/QQBot-NapCat/internal/onebot"
 	"github.com/gorilla/websocket"
 )
 
@@ -27,20 +30,47 @@ func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Handle the WebSocket connection here.
-	// For example, you can read messages from the client and respond.
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			break // Exit on error
 		}
-		log.Printf("Received : %s", string(msg))
-		setStatusCode(w, 10)
+		var baseEvent onebot.BaseEvent
+		err = json.Unmarshal(msg, baseEvent)
+		if err != nil {
+			log.Printf("Error unmarshalling message: %v", err)
+			continue // Skip this message if unmarshalling fails
+
+		}
+		switch baseEvent.PostType {
+		case "message":
+			var messageEvent onebot.MessageEvent
+			err = json.Unmarshal(msg, &messageEvent)
+			if err != nil {
+				log.Printf("Error unmarshalling message event: %v", err)
+				continue // Skip this message if unmarshalling fails
+			}
+			log.Printf("Received message event: %+v", messageEvent)
+			switch messageEvent.MessageType {
+			case "private":
+				var privateMessageEvent onebot.PrivateMessageEvent
+				err = json.Unmarshal(msg, &privateMessageEvent)
+				if err != nil {
+					log.Printf("Error unmarshalling private message event: %v", err)
+					continue // Skip this message if unmarshalling fails
+				}
+				sendPrivateMsg(strconv.FormatInt(privateMessageEvent.UserID, 10))
+
+			}
+
+		default:
+			log.Println("Unknown post type:", baseEvent.PostType)
+		}
 	}
 }
 
-func setStatusCode(w http.ResponseWriter, code int) {
-	url := "http://192.168.2.190:3000/send_private_msg"
+func sendPrivateMsg(userid string) {
+	url := "http://localhost:3000/send_private_msg"
 	method := "POST"
 
 	payload := strings.NewReader(`{

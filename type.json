@@ -1,0 +1,47 @@
+[
+    {
+    "self_id": 3979811427,
+    "user_id": 2634174807,
+    "time": 1751995508,
+    "message_id": 919230352,
+    "message_seq": 919230352,
+    "real_id": 919230352,
+    "real_seq": "179",
+    "message_type": "private",
+    "sender": {
+        "user_id": 2634174807,
+        "nickname": "邪王&勇者",
+        "card": ""
+    },
+    "raw_message": "没问题",
+    "font": 14,
+    "sub_type": "friend",
+    "message": "没问题",
+    "message_format": "string",
+    "post_type": "message",
+    "target_id": 2634174807
+},
+{
+    "self_id": 3979811427,
+    "user_id": 3979811427,
+    "time": 1751996433,
+    "message_id": 46509398,
+    "message_seq": 46509398,
+    "real_id": 46509398,
+    "real_seq": "181",
+    "message_type": "private",
+    "sender": {
+        "user_id": 3979811427,
+        "nickname": "宝儿最可爱",
+        "card": ""
+    },
+    "raw_message": "napcat",
+    "font": 14,
+    "sub_type": "friend",
+    "message": "napcat",
+    "message_format": "string",
+    "post_type": "message_sent",
+    "message_sent_type": "self",
+    "target_id": 2634174807
+}
+]

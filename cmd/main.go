@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/baoerzuikeai/QQBot-NapCat/internal/transport/websocket"
+	websocket "github.com/baoerzuikeai/QQBot-NapCat/internal/handler"
 )
 
 func main() {
