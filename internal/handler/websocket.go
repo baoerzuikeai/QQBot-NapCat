@@ -1,20 +1,30 @@
 package websocket
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/baoerzuikeai/QQBot-NapCat/internal/aiclient"
 	"github.com/baoerzuikeai/QQBot-NapCat/internal/onebot"
+	"github.com/baoerzuikeai/QQBot-NapCat/internal/repository/sqlite"
+	"github.com/baoerzuikeai/QQBot-NapCat/internal/service"
 	"github.com/gorilla/websocket"
 )
+
+type WebsocketHandler struct {
+	AiChatService service.AIChatServiceInterface
+}
+
+func NewWebsocketHandler(aiChatService service.AIChatServiceInterface) *WebsocketHandler {
+	return &WebsocketHandler{
+		AiChatService: aiChatService,
+	}
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -25,7 +35,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
+func (wh *WebsocketHandler) HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
@@ -38,62 +48,73 @@ func HandlerWebsocket(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break // Exit on error
 		}
-		var baseEvent onebot.BaseEvent
-		err = json.Unmarshal(msg, &baseEvent)
-		if err != nil {
-			log.Printf("Error unmarshalling message: %v", err)
-			continue // Skip this message if unmarshalling fails
-
-		}
-		switch baseEvent.PostType {
-		case "message":
-			var messageEvent onebot.MessageEvent
-			err = json.Unmarshal(msg, &messageEvent)
-			if err != nil {
-				log.Printf("Error unmarshalling message event: %v", err)
-				continue // Skip this message if unmarshalling fails
-			}
-			log.Printf("Received message event: %+v", messageEvent)
-			switch messageEvent.MessageType {
-			case "private":
-				var privateMessageEvent onebot.PrivateMessageEvent
-				err = json.Unmarshal(msg, &privateMessageEvent)
-				if err != nil {
-					log.Printf("Error unmarshalling private message event: %v", err)
-					continue // Skip this message if unmarshalling fails
-				}
-				sendPrivateMsg(strconv.FormatInt(privateMessageEvent.UserID, 10), privateMessageEvent.RawMessage)
-
-			}
-
-		default:
-			log.Println("Unknown post type:", baseEvent.PostType)
-		}
+		wh.despatchOneBotEvent(msg)
 	}
 }
 
-func sendPrivateMsg(userid, msg string) {
+func (wh *WebsocketHandler) despatchOneBotEvent(eventByte []byte) {
+	var baseEvent onebot.BaseEvent
+	err := json.Unmarshal(eventByte, &baseEvent)
+	if err != nil {
+		log.Printf("Error unmarshalling message: %v", err)
+		return // Skip this message if unmarshalling fails
+
+	}
+	switch baseEvent.PostType {
+	case "message":
+		var messageEvent onebot.MessageEvent
+		err = json.Unmarshal(eventByte, &messageEvent)
+		if err != nil {
+			log.Printf("Error unmarshalling message event: %v", err)
+			return // Skip this message if unmarshalling fails
+		}
+		log.Printf("Received message event: %+v", messageEvent)
+		switch messageEvent.MessageType {
+		case "private":
+			var privateMessageEvent onebot.PrivateMessageEvent
+			err = json.Unmarshal(eventByte, &privateMessageEvent)
+			if err != nil {
+				log.Printf("Error unmarshalling private message event: %v", err)
+				return // Skip this message if unmarshalling fails
+			}
+			wh.SendPrivateMsg(privateMessageEvent.UserID, privateMessageEvent.RawMessage)
+
+		}
+
+	default:
+		log.Println("Unknown post type:", baseEvent.PostType)
+	}
+}
+
+func (wh *WebsocketHandler) SendPrivateMsg(userid int64, msg string) {
 	url := "http://localhost:3000/send_private_msg"
 	method := "POST"
-
-	deepSeek := aiclient.NewDeepSeekClient("sk-78305562a4c942748da616a3d9a58ad7", "https://api.deepseek.com/chat/completions")
+	var sqhis []sqlite.AIHistory
 	//读取txt文本
-	contentBytes, _ := os.ReadFile("system.txt")
-	history := []aiclient.Message{
-		{
-			Role:    "system",
-			Content: string(contentBytes),
-		},
+	sqhis, err := wh.AiChatService.GetAIHistoryByUserID(userid)
+	if err != nil {
+		log.Printf("Error getting AI history: %v", err)
+		return
 	}
-	his, _ := deepSeek.GetResponse(context.Background(), history, msg)
-
+	var history []aiclient.Message
+	if len(sqhis) == 0 {
+		for _, his := range sqhis {
+			history = append(history, aiclient.Message{
+				Role:    his.Role,
+				Content: his.Content,
+			})
+		}
+	}
+	hisc, err := wh.AiChatService.GetResponse(history, msg)
+	wh.AiChatService.SaveAIhistory(userid, hisc[0].Message.Content, hisc[0].Message.Role, "session_id")
+	wh.AiChatService.SaveAIhistory(userid, msg, "user", "session_id")
 	payload := strings.NewReader(`{
-    "user_id": ` + `"` + userid + `"` + `,
+    "user_id": ` + `"` + strconv.FormatInt(userid, 10) + `"` + `,
     "message": [
         {
             "type": "text",
             "data": {
-                "text": ` + `"` + his[0].Message.Content + `"` + `
+                "text": ` + `"` + hisc[0].Message.Content + `"` + `
             }
         }
     ]
